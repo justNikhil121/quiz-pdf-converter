@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>PDF Quiz Converter</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+body{
+font-family:Arial;
+padding:30px;
+max-width:900px;
+margin:auto;
+background:#f7f7f7;
+}
+
+button,input{
+margin-top:10px;
+padding:10px;
+font-size:16px;
+}
+
+pre{
+background:white;
+padding:20px;
+border-radius:10px;
+white-space:pre-wrap;
+overflow:auto;
+}
+
+#status{
+margin-top:10px;
+font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<h2>PDF → Quiz JSON Converter</h2>
+
+<input type="file" id="pdfFile" accept=".pdf">
+
+<br>
+
+<button onclick="convertPDF()">Convert</button>
+<button onclick="copyOutput()">Copy JSON</button>
+<button onclick="downloadJSON()">Download File</button>
+
+<div id="status"></div>
+
+<pre id="output"></pre>
+
+<script>
+
+async function extractText(file){
+
+const arrayBuffer=await file.arrayBuffer();
+
+const pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
+
+let fullText="";
+
+for(let i=1;i<=pdf.numPages;i++){
+
+const page=await pdf.getPage(i);
+
+const content=await page.getTextContent();
+
+const text=content.items.map(item=>item.str).join(" ");
+
+fullText+=text+"\n";
+}
+
+return fullText;
+}
+
+function parseQuestions(text){
+
+const regex=/Q\.\s*ID.*?(?=Q\.\s*ID|$)/gs;
+
+const blocks=text.match(regex)||[];
+
+const questions=[];
+
+blocks.forEach(block=>{
+
+const optionRegex=/A\.(.*?)B\.(.*?)C\.(.*?)D\.(.*?)(?:Option\s+([A-D]))/s;
+
+const match=block.match(optionRegex);
+
+if(!match) return;
+
+const lines=block.split("A.")[0]
+.replace(/Q\.\s*ID.*?MARKS/i,"")
+.trim();
+
+const options=[
+match[1].trim(),
+match[2].trim(),
+match[3].trim(),
+match[4].trim()
+];
+
+const letter=match[5];
+
+const map={
+A:options[0],
+B:options[1],
+C:options[2],
+D:options[3]
+};
+
+questions.push({
+question:lines,
+options,
+answer:map[letter]||""
+});
+
+});
+
+return questions;
+}
+
+async function convertPDF(){
+
+const file=document.getElementById("pdfFile").files[0];
+
+if(!file) return;
+
+document.getElementById("status").innerText="Reading PDF...";
+
+const text=await extractText(file);
+
+document.getElementById("status").innerText="Converting...";
+
+const data=parseQuestions(text);
+
+document.getElementById("output").textContent=
+JSON.stringify(data,null,2);
+
+document.getElementById("status").innerText=
+"Done ✅";
+}
+
+function copyOutput(){
+
+const text=document.getElementById("output").textContent;
+
+navigator.clipboard.writeText(text);
+
+alert("Copied");
+}
+
+function downloadJSON(){
+
+const text=document.getElementById("output").textContent;
+
+const blob=new Blob([text],{type:"application/json"});
+
+const a=document.createElement("a");
+
+a.href=URL.createObjectURL(blob);
+
+a.download="quiz.json";
+
+a.click();
+}
+
+</script>
+
+</body>
+</html>
